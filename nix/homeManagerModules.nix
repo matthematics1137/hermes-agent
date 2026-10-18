@@ -70,6 +70,12 @@
         managedSystem = "home-manager";
       };
       unitPath = lib.makeBinPath (common.processPath { inherit pkgs cfg; });
+      environmentUnits =
+        lib.optional cfg.gateway.enable "hermes-agent.service"
+        ++ lib.optional (cfg.backend.mode != "none") "hermes-backend.service";
+      restartOnEnvironmentChange =
+        isLinux && environmentUnits != [ ] && (cfg.environment != { } || cfg.environmentFiles != [ ]);
+      envFile = lib.escapeShellArg "${cfg.hermesHome}/.env";
 
       # ── The desktop launcher ───────────────────────────────────────────
       # A GUI launcher reads no shell profile, so home.sessionVariables does
@@ -374,21 +380,41 @@
                     "linkGeneration"
                   ]
                   (
-                    common.mkStateScript {
-                      inherit pkgs cfg;
-                      inherit (cfg) hermesHome workingDirectory;
-                      run = "$DRY_RUN_CMD ";
-                      stateDirs = common.stateSubdirs;
-                      managedSystem = "home-manager";
-                      # This state has one user. No group needs access to it.
-                      modes = {
-                        config = "0600";
-                        env = "0600";
-                        managed = "0600";
-                        auth = "0600";
-                        document = "0600";
-                      };
-                    }
+                    lib.optionalString restartOnEnvironmentChange ''
+                      hermesEnvBefore=""
+                      if [ -f ${envFile} ]; then
+                        hermesEnvBefore="$(${pkgs.coreutils}/bin/sha256sum ${envFile})"
+                      fi
+                    ''
+                    + (
+                      common.mkStateScript {
+                        inherit pkgs cfg;
+                        inherit (cfg) hermesHome workingDirectory;
+                        run = "$DRY_RUN_CMD ";
+                        stateDirs = common.stateSubdirs;
+                        managedSystem = "home-manager";
+                        # This state has one user. No group needs access to it.
+                        modes = {
+                          config = "0600";
+                          env = "0600";
+                          managed = "0600";
+                          auth = "0600";
+                          document = "0600";
+                        };
+                      }
+                    )
+                    + lib.optionalString restartOnEnvironmentChange ''
+                      if [ -z "''${DRY_RUN_CMD:-}" ] && [ -f ${envFile} ]; then
+                        hermesEnvAfter="$(${pkgs.coreutils}/bin/sha256sum ${envFile})"
+                        if [ "$hermesEnvBefore" != "$hermesEnvAfter" ]; then
+                          # The unit text is unchanged when only .env changes. Reload
+                          # active processes; try-restart leaves stopped units alone.
+                          if ! ${pkgs.systemd}/bin/systemctl --user try-restart ${lib.escapeShellArgs environmentUnits}; then
+                            echo "hermes-agent: WARNING could not restart services after .env changed; restart them to load the new environment." >&2
+                          fi
+                        fi
+                      fi
+                    ''
                   );
             }
 

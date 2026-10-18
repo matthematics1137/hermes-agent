@@ -894,6 +894,10 @@ json.dump(sorted(leaf_paths(DEFAULT_CONFIG)), sys.stdout, indent=2)
           );
 
         # ── How .env is built ────────────────────────────────────────────
+        home-manager-env-restart = import ./tests/home-manager-env-restart.nix {
+          inherit inputs pkgs;
+        };
+
         # This check runs the real script that both modules use to build
         # $HERMES_HOME/.env. The important property is that a second run
         # gives the same result. Activation runs at each rebuild. If the

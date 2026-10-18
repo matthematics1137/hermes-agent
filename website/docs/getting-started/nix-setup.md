@@ -659,6 +659,8 @@ Then import the module into your Home Manager configuration. The configuration c
 
 `home-manager switch` makes `~/.hermes`, writes `config.yaml`, builds `.env` and starts the gateway as a user service.
 
+On Linux, when activation changes the merged `.env` content, it restarts the configured gateway and backend services if they are already running. This includes changes to the contents of `environmentFiles`. Unchanged content and dry runs leave running services alone; stopped services stay stopped.
+
 :::warning Enable linger, or the service stops at logout
 CAUTION: Enable linger for your account. Without linger, systemd stops the user manager when your last session ends, and the gateway stops with it. Home Manager cannot set linger, because linger is a property of the account:
 
